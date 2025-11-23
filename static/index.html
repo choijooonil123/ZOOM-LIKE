@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZOOM 클론 - 화상 회의</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <!-- 로비 화면 -->
+    <div id="lobby" class="screen">
+        <div class="lobby-container">
+            <div class="logo">
+                <h1>🎥 ZOOM 클론</h1>
+                <p>화상 회의에 참가하세요</p>
+            </div>
+            <div class="lobby-form">
+                <input type="text" id="username-input" placeholder="이름을 입력하세요" maxlength="20">
+                <input type="text" id="room-id-input" placeholder="회의실 ID (또는 새로 생성)" maxlength="50">
+                <button id="join-btn" class="btn btn-primary">회의 참가</button>
+                <button id="create-btn" class="btn btn-secondary">새 회의실 생성</button>
+            </div>
+            <div id="lobby-error" class="error-message"></div>
+        </div>
+    </div>
+
+    <!-- 회의 화면 -->
+    <div id="meeting" class="screen hidden">
+        <!-- 비디오 그리드 -->
+        <div class="video-container">
+            <div id="video-grid" class="video-grid">
+                <!-- 비디오 요소들이 여기에 동적으로 추가됩니다 -->
+            </div>
+        </div>
+
+        <!-- 컨트롤 바 -->
+        <div class="controls-bar">
+            <button id="mic-btn" class="control-btn" title="마이크">
+                <span class="icon">🎤</span>
+            </button>
+            <button id="video-btn" class="control-btn" title="비디오">
+                <span class="icon">📹</span>
+            </button>
+            <button id="screen-share-btn" class="control-btn" title="화면 공유">
+                <span class="icon">🖥️</span>
+            </button>
+            <button id="chat-btn" class="control-btn" title="채팅">
+                <span class="icon">💬</span>
+            </button>
+            <button id="leave-btn" class="control-btn leave" title="나가기">
+                <span class="icon">📞</span>
+            </button>
+        </div>
+
+        <!-- 채팅 사이드바 -->
+        <div id="chat-sidebar" class="chat-sidebar hidden">
+            <div class="chat-header">
+                <h3>채팅</h3>
+                <button id="close-chat-btn" class="close-btn">✕</button>
+            </div>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input type="text" id="chat-input" placeholder="메시지를 입력하세요..." maxlength="500">
+                <button id="send-btn" class="send-btn">전송</button>
+            </div>
+        </div>
+
+        <!-- 사용자 정보 표시 -->
+        <div id="user-info" class="user-info">
+            <span id="current-username"></span>
+            <span id="room-id-display"></span>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+

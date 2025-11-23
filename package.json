@@ -1,0 +1,13 @@
+{
+  "name": "zoom-clone",
+  "version": "1.0.0",
+  "description": "ZOOM 클론 애플리케이션",
+  "main": "server.py",
+  "scripts": {
+    "start": "python server.py"
+  },
+  "keywords": ["video", "conference", "webrtc"],
+  "author": "",
+  "license": "MIT"
+}
+
