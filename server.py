@@ -212,7 +212,36 @@ if __name__ == "__main__":
     # static 디렉토리 생성
     os.makedirs("static", exist_ok=True)
     
+    # Windows 콘솔 인코딩 설정
+    import sys
+    if sys.platform == "win32":
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    
+    # 로컬 IP 주소 가져오기
+    def get_local_ip():
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "localhost"
+    
+    local_ip = get_local_ip()
+    
+    # 포트 설정 (환경 변수 또는 기본값)
+    port = int(os.getenv("PORT", 8000))
+    
     print("🚀 ZOOM 클론 서버 시작 중...")
-    print("📡 서버 주소: http://localhost:8000")
-    uvicorn.run(socket_app, host="0.0.0.0", port=8000, log_level="info")
+    print("📡 로컬 접속: http://localhost:8000")
+    print(f"📡 네트워크 접속: http://{local_ip}:8000")
+    print("=" * 50)
+    print("💡 같은 네트워크의 다른 기기에서 접속하려면:")
+    print(f"   → http://{local_ip}:8000")
+    print("=" * 50)
+    uvicorn.run(socket_app, host="0.0.0.0", port=port, log_level="info")
 

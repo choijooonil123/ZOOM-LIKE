@@ -1,123 +1,122 @@
-# 🚀 GitHub 배포 가이드
+# ZOOM 클론 배포 가이드
 
-이 프로젝트를 GitHub에 업로드하고 배포하는 방법입니다.
+## 🚫 GitHub Pages는 사용 불가
 
-## 📋 GitHub에 업로드하기
+GitHub Pages는 **정적 파일(HTML, CSS, JS)만** 호스팅할 수 있어서, FastAPI + Socket.io 백엔드 서버는 호스팅할 수 없습니다.
 
-### 1. GitHub 저장소 생성
+## ✅ 무료 호스팅 옵션
 
-1. [GitHub](https://github.com)에 로그인
-2. 우측 상단의 **+** 버튼 클릭 → **New repository** 선택
-3. 저장소 이름 입력 (예: `zoom-clone`)
-4. **Public** 또는 **Private** 선택
-5. **Initialize this repository with a README** 체크 해제 (이미 README가 있음)
-6. **Create repository** 클릭
+### 1. **Render** (추천) ⭐
+- **무료 티어**: 있음 (제한적)
+- **장점**: 설정 간단, GitHub 연동 쉬움
+- **단점**: 무료 티어는 15분 비활성 시 슬리프 모드
 
-### 2. 로컬에서 Git 초기화 및 업로드
-
-터미널에서 다음 명령어를 실행하세요:
-
-```bash
-# Git 초기화 (아직 안 했다면)
-git init
-
-# 모든 파일 추가
-git add .
-
-# 첫 커밋
-git commit -m "Initial commit: ZOOM 클론 애플리케이션"
-
-# GitHub 저장소 연결 (YOUR_USERNAME과 YOUR_REPO_NAME을 실제 값으로 변경)
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-
-# 메인 브랜치로 이름 변경 (필요시)
-git branch -M main
-
-# GitHub에 푸시
-git push -u origin main
-```
-
-### 3. GitHub CLI 사용 (대안)
-
-```bash
-# GitHub CLI 설치 후
-gh repo create zoom-clone --public --source=. --remote=origin --push
-```
-
-## 🌐 무료 호스팅 옵션
-
-### 옵션 1: Render.com
-
-1. [Render.com](https://render.com) 가입
-2. **New +** → **Web Service** 선택
+**배포 방법:**
+1. [render.com](https://render.com) 가입
+2. "New Web Service" 선택
 3. GitHub 저장소 연결
 4. 설정:
-   - **Name**: zoom-clone
-   - **Environment**: Python 3
    - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `python server.py`
-   - **Port**: 8000
+   - **Start Command**: `uvicorn server:socket_app --host 0.0.0.0 --port $PORT`
+   - **Environment**: Python 3
+5. Deploy 클릭
 
-### 옵션 2: Railway
+---
 
-1. [Railway.app](https://railway.app) 가입
-2. **New Project** → **Deploy from GitHub repo** 선택
+### 2. **Railway**
+- **무료 티어**: $5 크레딧/월
+- **장점**: 사용한 만큼만 과금, 빠른 배포
+- **단점**: 크레딧 소진 시 중단
+
+**배포 방법:**
+1. [railway.app](https://railway.app) 가입
+2. "New Project" → "Deploy from GitHub repo"
 3. 저장소 선택
-4. 자동으로 감지되어 배포됨
+4. 자동으로 `railway.json` 설정 인식
+5. 배포 완료
 
-### 옵션 3: Heroku
+---
 
-1. [Heroku](https://heroku.com) 가입
-2. Heroku CLI 설치
-3. 다음 명령어 실행:
+### 3. **Fly.io**
+- **무료 티어**: 3개 앱, 공유 CPU
+- **장점**: 전 세계 엣지 배포, 빠른 속도
+- **단점**: 설정이 다소 복잡
 
+**배포 방법:**
+1. [fly.io](https://fly.io) 가입
+2. `flyctl` 설치: `curl -L https://fly.io/install.sh | sh`
+3. 로그인: `flyctl auth login`
+4. 앱 생성: `flyctl launch`
+5. 배포: `flyctl deploy`
+
+---
+
+### 4. **PythonAnywhere**
+- **무료 티어**: 있음 (제한적)
+- **장점**: Python 전용, 간단한 설정
+- **단점**: 무료 티어는 외부 접속 제한
+
+---
+
+## 📝 배포 전 체크리스트
+
+### 1. 환경 변수 설정
+배포 플랫폼에서 다음 환경 변수 설정:
+- `PORT`: 자동 할당됨 (대부분의 플랫폼)
+- `PYTHON_VERSION`: `3.11.0` (선택사항)
+
+### 2. CORS 설정 확인
+현재 `cors_allowed_origins="*"`로 설정되어 있어 모든 도메인에서 접속 가능합니다.
+프로덕션에서는 특정 도메인만 허용하도록 변경하는 것을 권장합니다.
+
+### 3. Socket.io 설정
+배포 후 Socket.io 연결이 제대로 작동하는지 확인:
+- WebSocket 연결이 지원되는지
+- 포트가 올바르게 설정되었는지
+
+---
+
+## 🔧 로컬 테스트
+
+배포 전 로컬에서 테스트:
 ```bash
-heroku create zoom-clone-app
-git push heroku main
+# 의존성 설치
+pip install -r requirements.txt
+
+# 서버 실행
+python server.py
 ```
 
-### 옵션 4: PythonAnywhere
+---
 
-1. [PythonAnywhere](https://www.pythonanywhere.com) 가입
-2. **Web** 탭에서 새 웹앱 생성
-3. GitHub에서 코드 가져오기
-4. WSGI 파일 설정
+## 🌐 배포 후 접속
 
-## 📝 배포 시 주의사항
+배포가 완료되면:
+1. 플랫폼에서 제공하는 URL 확인 (예: `https://zoom-clone.onrender.com`)
+2. 해당 URL로 접속
+3. 같은 URL을 상대방에게 공유
 
-### 환경 변수 설정
+---
 
-프로덕션 환경에서는 환경 변수를 사용하세요:
+## ⚠️ 주의사항
 
-```python
-import os
+1. **무료 티어 제한**:
+   - Render: 15분 비활성 시 슬리프 모드 (첫 요청 시 느림)
+   - Railway: 크레딧 소진 시 중단
+   - Fly.io: 공유 CPU 사용
 
-PORT = int(os.getenv("PORT", 8000))
-HOST = os.getenv("HOST", "0.0.0.0")
-```
+2. **WebRTC 제한**:
+   - 일부 호스팅 서비스는 WebRTC를 완전히 지원하지 않을 수 있음
+   - STUN/TURN 서버가 필요할 수 있음
 
-### Procfile 생성 (Heroku용)
+3. **HTTPS 필수**:
+   - 대부분의 브라우저는 HTTPS에서만 카메라/마이크 접근 허용
+   - 배포 플랫폼은 자동으로 HTTPS 제공
 
-```
-web: python server.py
-```
+---
 
-### requirements.txt 확인
+## 💡 추천
 
-모든 의존성이 포함되어 있는지 확인하세요.
-
-## 🔒 보안 고려사항
-
-프로덕션 배포 전에:
-
-- [ ] CORS 설정 제한
-- [ ] 환경 변수로 민감한 정보 관리
-- [ ] HTTPS 사용
-- [ ] Rate limiting 추가
-- [ ] 인증 시스템 구현
-
-## 📚 추가 리소스
-
-- [FastAPI 배포 가이드](https://fastapi.tiangolo.com/deployment/)
-- [WebRTC 프로덕션 가이드](https://webrtc.org/getting-started/production-checklist)
+**개인 프로젝트/테스트**: **Render** (가장 간단)
+**프로덕션/상용**: **Railway** 또는 **Fly.io** (더 안정적)
 
