@@ -528,19 +528,27 @@ async def join_room(sid, data):
             db.commit()
         
         # 기존 사용자들에게 새 사용자 알림
-        await sio.emit("user-joined", {
-            "sid": sid,
-            "username": username
-        }, room=room_id, skip_sid=sid)
+        existing_count = len([uid for uid in rooms[room_id]["users"] if uid != sid and uid in users])
+        if existing_count > 0:
+            await sio.emit("user-joined", {
+                "sid": sid,
+                "username": username
+            }, room=room_id, skip_sid=sid)
+            print(f"기존 사용자들에게 새 사용자 알림: {username} ({sid})")
         
         # 새 사용자에게 기존 사용자 목록 전송
         existing_users = [
             {"sid": uid, "username": users[uid].get("username")}
             for uid in rooms[room_id]["users"] if uid != sid and uid in users
         ]
-        await sio.emit("existing-users", {"users": existing_users}, room=sid)
+        if existing_users:
+            await sio.emit("existing-users", {"users": existing_users}, room=sid)
+            print(f"새 사용자에게 기존 사용자 목록 전송: {len(existing_users)}명")
+        else:
+            await sio.emit("existing-users", {"users": []}, room=sid)
+            print(f"기존 사용자가 없습니다 (첫 번째 참가자)")
         
-        print(f"사용자 {username} ({sid})가 방 {room_id}에 참가했습니다")
+        print(f"✅ 사용자 {username} ({sid})가 방 {room_id}에 참가했습니다 (총 {len(rooms[room_id]['users'])}명)")
     except Exception as e:
         print(f"회의 참가 중 오류: {e}")
         db.rollback()
@@ -558,7 +566,9 @@ async def offer(sid, data):
             "offer": offer,
             "from": sid
         }, room=target_sid)
-        print(f"Offer 전송: {sid} -> {target_sid}")
+        print(f"📤 Offer 전송: {sid[:8]}... -> {target_sid[:8]}...")
+    else:
+        print(f"⚠️ Offer 전송 실패: target_sid={target_sid}, offer={bool(offer)}")
 
 @sio.event
 async def answer(sid, data):
@@ -571,7 +581,9 @@ async def answer(sid, data):
             "answer": answer,
             "from": sid
         }, room=target_sid)
-        print(f"Answer 전송: {sid} -> {target_sid}")
+        print(f"📤 Answer 전송: {sid[:8]}... -> {target_sid[:8]}...")
+    else:
+        print(f"⚠️ Answer 전송 실패: target_sid={target_sid}, answer={bool(answer)}")
 
 @sio.event
 async def ice_candidate(sid, data):
@@ -584,6 +596,7 @@ async def ice_candidate(sid, data):
             "candidate": candidate,
             "from": sid
         }, room=target_sid)
+        # ICE Candidate는 너무 많으므로 로그는 간소화
 
 @sio.event
 async def message(sid, data):

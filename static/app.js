@@ -410,13 +410,26 @@ class ZoomClone {
 
         this.socket.on('user-joined', async (data) => {
             console.log('새 사용자 참가:', data);
-            await this.createPeerConnection(data.sid, true);
+            if (data.sid && data.sid !== this.socket.id) {
+                console.log('새 사용자와 연결 시작:', data.sid);
+                // 연결 상태 표시를 위해 먼저 비디오 요소 생성 (연결 중 상태)
+                const username = data.username || 'User';
+                this.showConnectingUser(data.sid, username);
+                await this.createPeerConnection(data.sid, true);
+            }
         });
 
         this.socket.on('existing-users', async (data) => {
             console.log('기존 사용자들:', data);
-            for (const user of data.users) {
-                await this.createPeerConnection(user.sid, true);
+            if (data.users && data.users.length > 0) {
+                for (const user of data.users) {
+                    if (user.sid && user.sid !== this.socket.id) {
+                        console.log('기존 사용자와 연결 시작:', user.sid);
+                        await this.createPeerConnection(user.sid, true);
+                    }
+                }
+            } else {
+                console.log('기존 사용자가 없습니다 (첫 번째 참가자)');
             }
         });
 
@@ -641,10 +654,25 @@ class ZoomClone {
     }
 
     async createPeerConnection(targetSid, isInitiator) {
-        if (this.peers[targetSid]) {
-            console.log('이미 피어 연결이 존재합니다:', targetSid);
+        if (!targetSid || targetSid === this.socket.id) {
+            console.warn('유효하지 않은 targetSid:', targetSid);
             return;
         }
+
+        if (this.peers[targetSid]) {
+            console.log('이미 피어 연결이 존재합니다:', targetSid);
+            // 기존 연결 상태 확인
+            const state = this.peers[targetSid].connectionState;
+            console.log(`기존 연결 상태: ${state}`);
+            if (state === 'connected' || state === 'connecting') {
+                return;
+            }
+            // 연결이 끊어진 경우 기존 연결 제거
+            this.peers[targetSid].close();
+            delete this.peers[targetSid];
+        }
+
+        console.log(`피어 연결 생성: ${targetSid}, initiator: ${isInitiator}`);
 
         const configuration = {
             iceServers: [
@@ -660,50 +688,87 @@ class ZoomClone {
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, this.localStream);
+                console.log(`트랙 추가: ${track.kind} (${track.enabled ? 'enabled' : 'disabled'})`);
             });
+        } else {
+            console.warn('로컬 스트림이 없습니다. 미디어 스트림을 먼저 가져와야 합니다.');
         }
 
         // 원격 스트림 처리
         peerConnection.ontrack = (event) => {
-            console.log('원격 스트림 수신:', targetSid);
-            const remoteStream = event.streams[0];
-            this.addVideoElement(targetSid, remoteStream, 'User', false);
+            console.log('✅ 원격 스트림 수신:', targetSid, event.streams);
+            if (event.streams && event.streams.length > 0) {
+                const remoteStream = event.streams[0];
+                const username = users[targetSid]?.username || 'User';
+                this.addVideoElement(targetSid, remoteStream, username, false);
+                this.updateConnectionStatus(targetSid, 'connected');
+            } else {
+                console.warn('스트림이 없습니다:', targetSid);
+            }
         };
 
         // ICE Candidate 처리
         peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
+                console.log(`ICE Candidate 전송: ${targetSid}`, event.candidate);
                 this.socket.emit('ice_candidate', {
                     target: targetSid,
                     candidate: event.candidate
                 });
+            } else {
+                console.log(`ICE Candidate 수집 완료: ${targetSid}`);
             }
         };
 
         // 연결 상태 변경
         peerConnection.onconnectionstatechange = () => {
-            console.log(`연결 상태 (${targetSid}):`, peerConnection.connectionState);
-            if (peerConnection.connectionState === 'failed' || 
-                peerConnection.connectionState === 'disconnected') {
+            const state = peerConnection.connectionState;
+            console.log(`연결 상태 변경 (${targetSid}):`, state);
+            this.updateConnectionStatus(targetSid, state);
+            
+            if (state === 'connected') {
+                console.log(`✅ 연결 성공: ${targetSid}`);
+            } else if (state === 'failed') {
+                console.error(`❌ 연결 실패: ${targetSid}`);
                 // 재연결 시도
                 setTimeout(() => {
                     if (this.peers[targetSid] && 
                         this.peers[targetSid].connectionState !== 'connected') {
+                        console.log(`재연결 시도: ${targetSid}`);
                         this.createPeerConnection(targetSid, true);
                     }
                 }, 3000);
+            } else if (state === 'disconnected') {
+                console.warn(`⚠️ 연결 끊김: ${targetSid}`);
             }
+        };
+
+        // ICE 연결 상태 변경
+        peerConnection.oniceconnectionstatechange = () => {
+            const iceState = peerConnection.iceConnectionState;
+            console.log(`ICE 연결 상태 (${targetSid}):`, iceState);
+        };
+
+        // ICE 수집 상태 변경
+        peerConnection.onicegatheringstatechange = () => {
+            console.log(`ICE 수집 상태 (${targetSid}):`, peerConnection.iceGatheringState);
         };
 
         // Offer 생성 및 전송
         if (isInitiator) {
             try {
-                const offer = await peerConnection.createOffer();
+                console.log(`Offer 생성 중: ${targetSid}`);
+                const offer = await peerConnection.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
                 await peerConnection.setLocalDescription(offer);
+                console.log(`Offer 생성 완료, 전송 중: ${targetSid}`);
                 this.socket.emit('offer', {
                     target: targetSid,
                     offer: offer
                 });
+                console.log(`Offer 전송 완료: ${targetSid}`);
             } catch (error) {
                 console.error('Offer 생성 실패:', error);
             }
@@ -711,33 +776,52 @@ class ZoomClone {
     }
 
     async handleOffer(data) {
-        const peerConnection = this.peers[data.from];
+        console.log(`Offer 처리 시작: ${data.from}`);
+        let peerConnection = this.peers[data.from];
         if (!peerConnection) {
+            console.log(`피어 연결이 없어서 생성: ${data.from}`);
             await this.createPeerConnection(data.from, false);
+            peerConnection = this.peers[data.from];
         }
 
-        const pc = this.peers[data.from];
+        if (!peerConnection) {
+            console.error(`피어 연결 생성 실패: ${data.from}`);
+            return;
+        }
+
         try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
+            console.log(`Remote Description 설정 중: ${data.from}`);
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            console.log(`Answer 생성 중: ${data.from}`);
+            const answer = await peerConnection.createAnswer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            await peerConnection.setLocalDescription(answer);
+            console.log(`Answer 전송 중: ${data.from}`);
             this.socket.emit('answer', {
                 target: data.from,
                 answer: answer
             });
+            console.log(`Answer 전송 완료: ${data.from}`);
         } catch (error) {
             console.error('Answer 생성 실패:', error);
         }
     }
 
     async handleAnswer(data) {
+        console.log(`Answer 처리 시작: ${data.from}`);
         const peerConnection = this.peers[data.from];
         if (peerConnection) {
             try {
+                console.log(`Remote Description (Answer) 설정 중: ${data.from}`);
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                console.log(`Answer 설정 완료: ${data.from}`);
             } catch (error) {
                 console.error('Answer 설정 실패:', error);
             }
+        } else {
+            console.warn(`피어 연결이 없습니다: ${data.from}`);
         }
     }
 
@@ -745,10 +829,17 @@ class ZoomClone {
         const peerConnection = this.peers[data.from];
         if (peerConnection) {
             try {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                if (data.candidate) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    console.log(`ICE Candidate 추가 완료: ${data.from}`);
+                } else {
+                    console.log(`ICE Candidate 수집 완료: ${data.from}`);
+                }
             } catch (error) {
                 console.error('ICE Candidate 추가 실패:', error);
             }
+        } else {
+            console.warn(`피어 연결이 없어서 ICE Candidate를 추가할 수 없습니다: ${data.from}`);
         }
     }
 
@@ -778,6 +869,15 @@ class ZoomClone {
         label.className = 'video-label';
         label.textContent = isLocal ? `${username} (나)` : username;
 
+        // 연결 상태 표시
+        const statusIndicator = document.createElement('div');
+        statusIndicator.className = 'connection-status';
+        statusIndicator.id = `status-${sid}`;
+        statusIndicator.innerHTML = '<span class="status-dot"></span><span class="status-text">연결 중...</span>';
+        if (isLocal) {
+            statusIndicator.style.display = 'none'; // 로컬은 표시 안 함
+        }
+
         const controls = document.createElement('div');
         controls.className = 'video-controls-overlay';
         if (!isLocal) {
@@ -786,6 +886,7 @@ class ZoomClone {
 
         videoWrapper.appendChild(video);
         videoWrapper.appendChild(label);
+        videoWrapper.appendChild(statusIndicator);
         videoWrapper.appendChild(controls);
 
         this.videoGrid.appendChild(videoWrapper);
@@ -794,6 +895,110 @@ class ZoomClone {
         video.onloadedmetadata = () => {
             video.play().catch(err => console.error('비디오 재생 실패:', err));
         };
+
+        // 비디오 재생 확인
+        video.onplay = () => {
+            if (!isLocal) {
+                console.log(`✅ 비디오 재생 시작: ${username} (${sid})`);
+                this.updateConnectionStatus(sid, 'connected');
+            }
+        };
+
+        video.onerror = (err) => {
+            console.error(`❌ 비디오 오류: ${username} (${sid})`, err);
+            this.updateConnectionStatus(sid, 'error');
+        };
+    }
+
+    updateConnectionStatus(sid, state) {
+        const statusElement = document.getElementById(`status-${sid}`);
+        if (!statusElement) return;
+
+        const statusDot = statusElement.querySelector('.status-dot');
+        const statusText = statusElement.querySelector('.status-text');
+
+        // 상태에 따른 스타일 및 텍스트 변경
+        statusElement.className = 'connection-status';
+        statusDot.className = 'status-dot';
+
+        switch(state) {
+            case 'connected':
+                statusElement.classList.add('connected');
+                statusDot.classList.add('connected');
+                statusText.textContent = '연결됨';
+                break;
+            case 'connecting':
+                statusElement.classList.add('connecting');
+                statusDot.classList.add('connecting');
+                statusText.textContent = '연결 중...';
+                break;
+            case 'disconnected':
+                statusElement.classList.add('disconnected');
+                statusDot.classList.add('disconnected');
+                statusText.textContent = '연결 끊김';
+                break;
+            case 'failed':
+                statusElement.classList.add('failed');
+                statusDot.classList.add('failed');
+                statusText.textContent = '연결 실패';
+                break;
+            default:
+                statusElement.classList.add('connecting');
+                statusDot.classList.add('connecting');
+                statusText.textContent = '연결 중...';
+        }
+    }
+
+    showConnectingUser(sid, username) {
+        // 연결 중인 사용자를 표시하기 위한 플레이스홀더 생성
+        const existing = document.getElementById(`video-${sid}`);
+        if (existing) return; // 이미 있으면 스킵
+
+        const videoWrapper = document.createElement('div');
+        videoWrapper.id = `video-${sid}`;
+        videoWrapper.className = 'video-wrapper connecting';
+
+        const placeholder = document.createElement('div');
+        placeholder.className = 'video-placeholder';
+        placeholder.innerHTML = `
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-name">${username}</div>
+        `;
+
+        const statusIndicator = document.createElement('div');
+        statusIndicator.className = 'connection-status';
+        statusIndicator.id = `status-${sid}`;
+        statusIndicator.innerHTML = '<span class="status-dot connecting"></span><span class="status-text">연결 중...</span>';
+
+        videoWrapper.appendChild(placeholder);
+        videoWrapper.appendChild(statusIndicator);
+        this.videoGrid.appendChild(videoWrapper);
+    }
+
+    showConnectingUser(sid, username) {
+        // 연결 중인 사용자를 표시하기 위한 플레이스홀더 생성
+        const existing = document.getElementById(`video-${sid}`);
+        if (existing) return; // 이미 있으면 스킵
+
+        const videoWrapper = document.createElement('div');
+        videoWrapper.id = `video-${sid}`;
+        videoWrapper.className = 'video-wrapper connecting';
+
+        const placeholder = document.createElement('div');
+        placeholder.className = 'video-placeholder';
+        placeholder.innerHTML = `
+            <div class="placeholder-icon">👤</div>
+            <div class="placeholder-name">${username}</div>
+        `;
+
+        const statusIndicator = document.createElement('div');
+        statusIndicator.className = 'connection-status connecting';
+        statusIndicator.id = `status-${sid}`;
+        statusIndicator.innerHTML = '<span class="status-dot connecting"></span><span class="status-text">연결 중...</span>';
+
+        videoWrapper.appendChild(placeholder);
+        videoWrapper.appendChild(statusIndicator);
+        this.videoGrid.appendChild(videoWrapper);
     }
 
     removeVideoElement(sid) {
@@ -1618,7 +1823,7 @@ class ZoomClone {
 
     sendDrawData(data) {
         if (this.socket && this.currentRoomId) {
-            this.socket.emit('whiteboard-draw', {
+            this.socket.emit('whiteboard_draw', {
                 room_id: this.currentRoomId,
                 ...data
             });
@@ -1637,7 +1842,7 @@ class ZoomClone {
 
     clearWhiteboard() {
         if (this.socket && this.currentRoomId) {
-            this.socket.emit('whiteboard-clear', {
+            this.socket.emit('whiteboard_clear', {
                 room_id: this.currentRoomId
             });
         }

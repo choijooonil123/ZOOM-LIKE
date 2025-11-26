@@ -313,6 +313,95 @@ body {
     z-index: 10;
 }
 
+.connection-status {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 5px 10px;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: white;
+    z-index: 10;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-dot.connecting {
+    background: #ffa500;
+    animation: pulse 1.5s infinite;
+}
+
+.status-dot.connected {
+    background: #4caf50;
+}
+
+.status-dot.disconnected {
+    background: #9e9e9e;
+}
+
+.status-dot.failed {
+    background: #f44336;
+}
+
+.connection-status.connected {
+    background: rgba(76, 175, 80, 0.8);
+}
+
+.connection-status.connecting {
+    background: rgba(255, 165, 0, 0.8);
+}
+
+.connection-status.disconnected {
+    background: rgba(158, 158, 158, 0.8);
+}
+
+.connection-status.failed {
+    background: rgba(244, 67, 54, 0.8);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.video-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.placeholder-icon {
+    font-size: 64px;
+    margin-bottom: 10px;
+}
+
+.placeholder-name {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.video-wrapper.connecting {
+    border: 2px dashed #ffa500;
+}
+
 .video-controls-overlay {
     position: absolute;
     top: 10px;
