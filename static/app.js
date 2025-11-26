@@ -422,9 +422,12 @@ class ZoomClone {
         this.socket.on('existing-users', async (data) => {
             console.log('기존 사용자들:', data);
             if (data.users && data.users.length > 0) {
+                console.log(`📊 총 ${data.users.length}명의 사용자가 방에 있습니다`);
                 for (const user of data.users) {
                     if (user.sid && user.sid !== this.socket.id) {
                         console.log('기존 사용자와 연결 시작:', user.sid);
+                        // 연결 상태 표시를 위해 먼저 비디오 요소 생성 (연결 중 상태)
+                        this.showConnectingUser(user.sid, user.username || 'User');
                         await this.createPeerConnection(user.sid, true);
                     }
                 }
@@ -498,13 +501,29 @@ class ZoomClone {
     }
 
     createRoom() {
-        // 새 회의실 생성: 항상 새로운 방 ID 생성 (기존 방 ID 무시)
-        const roomId = this.generateRoomId();
-        this.roomIdInput.value = roomId;
+        // ⚠️ 주의: "새 회의실 생성" 버튼을 클릭했을 때만 새로운 방 ID 생성
+        // 사용자가 이미 방 ID를 입력했다면, 그것을 사용하고 싶은지 확인해야 함
+        const currentRoomId = this.roomIdInput.value.trim();
         
-        // 방 ID를 URL과 로컬 스토리지에 저장
-        this.saveRoomIdToURL(roomId);
-        this.joinRoom();
+        if (currentRoomId) {
+            // 이미 방 ID가 입력되어 있으면 사용자에게 확인
+            if (confirm(`이미 방 ID가 입력되어 있습니다: "${currentRoomId}"\n\n새로운 방 ID를 생성하시겠습니까?`)) {
+                // 사용자가 확인하면 새 방 ID 생성
+                const roomId = this.generateRoomId();
+                this.roomIdInput.value = roomId;
+                this.saveRoomIdToURL(roomId);
+                this.joinRoom();
+            } else {
+                // 사용자가 취소하면 기존 방 ID로 참가
+                this.joinRoom();
+            }
+        } else {
+            // 방 ID가 없으면 새로 생성
+            const roomId = this.generateRoomId();
+            this.roomIdInput.value = roomId;
+            this.saveRoomIdToURL(roomId);
+            this.joinRoom();
+        }
     }
     
     loadRoomIdFromURL() {
@@ -547,6 +566,7 @@ class ZoomClone {
 
     async joinRoom() {
         const username = this.usernameInput.value.trim();
+        // ⚠️ 중요: 사용자가 입력한 방 ID를 절대 변경하지 않음
         let roomId = this.roomIdInput.value.trim();
 
         if (!username) {
@@ -555,12 +575,13 @@ class ZoomClone {
         }
 
         // 회의 참가: 방 ID가 없으면 기존 방 ID 사용 (URL 또는 로컬 스토리지에서)
-        // 방 ID가 입력되어 있으면 그대로 사용 (변경하지 않음)
+        // ⚠️ 중요: 방 ID가 이미 입력되어 있으면 절대 변경하지 않음
         if (!roomId) {
             const urlParams = new URLSearchParams(window.location.search);
             roomId = urlParams.get('room') || localStorage.getItem('lastRoomId');
             
             if (roomId) {
+                // URL이나 로컬 스토리지에서 가져온 경우에만 입력 필드에 설정
                 this.roomIdInput.value = roomId;
             } else {
                 this.showError('회의실 ID를 입력하거나 "새 회의실 생성" 버튼을 클릭하세요');
@@ -568,13 +589,14 @@ class ZoomClone {
             }
         }
         
-        // 입력된 방 ID는 절대 변경하지 않음
+        // ⚠️ 중요: 사용자가 입력한 방 ID는 절대 변경하지 않음
+        // 입력 필드의 값을 그대로 사용 (추가 처리 없음)
 
         // 방 ID가 변경되지 않도록 보장
         this.currentUsername = username;
-        this.currentRoomId = roomId;
+        this.currentRoomId = roomId; // 입력된 방 ID를 그대로 저장
         
-        // 방 ID를 URL과 로컬 스토리지에 저장 (항상 최신 상태 유지)
+        // 방 ID를 URL과 로컬 스토리지에 저장 (읽기 전용, 변경하지 않음)
         this.saveRoomIdToURL(roomId);
 
         // Socket 초기화
@@ -699,7 +721,15 @@ class ZoomClone {
             console.log('✅ 원격 스트림 수신:', targetSid, event.streams);
             if (event.streams && event.streams.length > 0) {
                 const remoteStream = event.streams[0];
-                const username = users[targetSid]?.username || 'User';
+                // 사용자 정보 가져오기 (서버에서 받은 정보 사용)
+                const existingVideo = document.getElementById(`video-${targetSid}`);
+                let username = 'User';
+                if (existingVideo) {
+                    const label = existingVideo.querySelector('.video-label, .placeholder-name');
+                    if (label) {
+                        username = label.textContent || 'User';
+                    }
+                }
                 this.addVideoElement(targetSid, remoteStream, username, false);
                 this.updateConnectionStatus(targetSid, 'connected');
             } else {
