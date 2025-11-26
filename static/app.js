@@ -36,6 +36,15 @@ class ZoomClone {
         this.registerEmailInput = document.getElementById('register-email');
         this.registerPasswordInput = document.getElementById('register-password');
         this.registerBtn = document.getElementById('register-btn');
+        
+        // 요소가 제대로 로드되었는지 확인
+        if (!this.registerBtn) {
+            console.error('회원가입 버튼을 찾을 수 없습니다!');
+        }
+        if (!this.registerUsernameInput || !this.registerEmailInput || !this.registerPasswordInput) {
+            console.error('회원가입 입력 필드를 찾을 수 없습니다!');
+        }
+        
         this.showRegisterLink = document.getElementById('show-register');
         this.showLoginLink = document.getElementById('show-login');
         this.showGuestLink = document.getElementById('show-guest');
@@ -71,8 +80,23 @@ class ZoomClone {
 
     initializeEventListeners() {
         // 인증 이벤트
-        this.loginBtn.addEventListener('click', () => this.login());
-        this.registerBtn.addEventListener('click', () => this.register());
+        if (this.loginBtn) {
+            this.loginBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.login();
+            });
+        }
+        
+        if (this.registerBtn) {
+            this.registerBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('회원가입 버튼 클릭됨');
+                this.register();
+            });
+        } else {
+            console.error('회원가입 버튼을 찾을 수 없습니다!');
+        }
         this.showRegisterLink.addEventListener('click', (e) => {
             e.preventDefault();
             this.showRegisterForm();
@@ -171,9 +195,20 @@ class ZoomClone {
     }
 
     async register() {
+        console.log('회원가입 버튼 클릭됨');
+        
+        // 입력 필드가 제대로 연결되었는지 확인
+        if (!this.registerUsernameInput || !this.registerEmailInput || !this.registerPasswordInput) {
+            console.error('입력 필드를 찾을 수 없습니다');
+            this.showAuthError('시스템 오류가 발생했습니다. 페이지를 새로고침해주세요.');
+            return;
+        }
+        
         const username = this.registerUsernameInput.value.trim();
         const email = this.registerEmailInput.value.trim();
         const password = this.registerPasswordInput.value;
+
+        console.log('입력값:', { username, email, passwordLength: password.length });
 
         if (!username || !email || !password) {
             this.showAuthError('모든 필드를 입력해주세요');
@@ -183,6 +218,12 @@ class ZoomClone {
         if (password.length < 6) {
             this.showAuthError('비밀번호는 최소 6자 이상이어야 합니다');
             return;
+        }
+        
+        // 버튼 비활성화 (중복 클릭 방지)
+        if (this.registerBtn) {
+            this.registerBtn.disabled = true;
+            this.registerBtn.textContent = '처리 중...';
         }
 
         try {
@@ -228,6 +269,12 @@ class ZoomClone {
                 this.showAuthError('요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.');
             } else {
                 this.showAuthError(error.message || '회원가입 중 오류가 발생했습니다');
+            }
+        } finally {
+            // 버튼 다시 활성화
+            if (this.registerBtn) {
+                this.registerBtn.disabled = false;
+                this.registerBtn.textContent = '회원가입';
             }
         }
     }
