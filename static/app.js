@@ -485,8 +485,16 @@ class ZoomClone {
     }
 
     createRoom() {
-        const roomId = this.generateRoomId();
-        this.roomIdInput.value = roomId;
+        // 기존 방 ID가 있으면 그대로 사용, 없으면 새로 생성
+        let roomId = this.roomIdInput.value.trim();
+        
+        if (!roomId) {
+            // 방 ID가 없을 때만 새로 생성
+            roomId = this.generateRoomId();
+            this.roomIdInput.value = roomId;
+        }
+        
+        // 방 ID를 URL과 로컬 스토리지에 저장
         this.saveRoomIdToURL(roomId);
         this.joinRoom();
     }
@@ -531,22 +539,31 @@ class ZoomClone {
 
     async joinRoom() {
         const username = this.usernameInput.value.trim();
-        const roomId = this.roomIdInput.value.trim();
+        let roomId = this.roomIdInput.value.trim();
 
         if (!username) {
             this.showError('이름을 입력하세요');
             return;
         }
 
+        // 방 ID가 없으면 기존 방 ID 사용 (URL 또는 로컬 스토리지에서)
         if (!roomId) {
-            this.showError('회의실 ID를 입력하세요');
-            return;
+            const urlParams = new URLSearchParams(window.location.search);
+            roomId = urlParams.get('room') || localStorage.getItem('lastRoomId');
+            
+            if (roomId) {
+                this.roomIdInput.value = roomId;
+            } else {
+                this.showError('회의실 ID를 입력하세요');
+                return;
+            }
         }
 
+        // 방 ID가 변경되지 않도록 보장
         this.currentUsername = username;
         this.currentRoomId = roomId;
         
-        // 방 ID를 URL과 로컬 스토리지에 저장
+        // 방 ID를 URL과 로컬 스토리지에 저장 (항상 최신 상태 유지)
         this.saveRoomIdToURL(roomId);
 
         // Socket 초기화
