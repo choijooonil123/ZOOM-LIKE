@@ -2,26 +2,92 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ZOOM 클론">
+    <meta name="theme-color" content="#667eea">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>ZOOM 클론 - 화상 회의</title>
+    <link rel="manifest" href="/static/manifest.json">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation@2.0.0/dist/body-segmentation.min.js"></script>
 </head>
 <body>
+    <!-- 로그인 화면 -->
+    <div id="login" class="screen">
+        <div class="login-container">
+            <div class="login-header">
+                <div class="logo">
+                    <h1>🎥 ZOOM 클론</h1>
+                    <p>화상 회의에 참가하세요</p>
+                </div>
+            </div>
+            <div class="login-tabs">
+                <button class="tab-btn active" data-tab="login">로그인</button>
+                <button class="tab-btn" data-tab="register">회원가입</button>
+            </div>
+            
+            <!-- 로그인 폼 -->
+            <div id="login-form" class="auth-form">
+                <input type="text" id="login-username" placeholder="사용자명" maxlength="50" required>
+                <input type="password" id="login-password" placeholder="비밀번호" maxlength="100" required>
+                <button id="login-submit-btn" class="btn btn-primary">로그인</button>
+                <div id="login-error" class="error-message"></div>
+            </div>
+            
+            <!-- 회원가입 폼 -->
+            <div id="register-form" class="auth-form hidden">
+                <input type="text" id="register-username" placeholder="사용자명" maxlength="50" required>
+                <input type="email" id="register-email" placeholder="이메일" maxlength="100" required>
+                <input type="password" id="register-password" placeholder="비밀번호 (최소 6자)" maxlength="100" required>
+                <button id="register-submit-btn" class="btn btn-primary">회원가입</button>
+                <div id="register-error" class="error-message"></div>
+            </div>
+            
+            <!-- 게스트 모드 -->
+            <div class="guest-mode" style="display: block !important; visibility: visible !important; margin-top: 30px !important; padding-top: 20px !important; border-top: 2px solid #e0e0e0 !important; text-align: center !important; width: 100% !important;">
+                <p style="color: #666; margin-bottom: 15px; font-size: 0.9em; margin-top: 0;">또는</p>
+                <button id="guest-btn" type="button" class="btn" style="display: inline-block !important; visibility: visible !important; opacity: 1 !important; width: 100% !important; max-width: 100% !important; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important; color: white !important; border: none !important; padding: 15px 20px !important; margin: 10px 0 !important; font-weight: 600 !important; font-size: 16px !important; border-radius: 10px !important; cursor: pointer !important; box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3) !important;">🎮 게스트로 계속하기</button>
+                <p style="color: #999; margin-top: 15px; font-size: 0.85em;">로그인 없이 빠르게 회의에 참가하세요</p>
+            </div>
+        </div>
+    </div>
+
     <!-- 로비 화면 -->
-    <div id="lobby" class="screen">
+    <div id="lobby" class="screen hidden">
         <div class="lobby-container">
-            <div class="logo">
-                <h1>🎥 ZOOM 클론</h1>
-                <p>화상 회의에 참가하세요</p>
+            <div class="lobby-header">
+                <div class="logo">
+                    <h1>🎥 ZOOM 클론</h1>
+                    <p>화상 회의에 참가하세요</p>
+                </div>
             </div>
             <div class="lobby-form">
-                <input type="text" id="username-input" placeholder="이름을 입력하세요" maxlength="20">
+                <input type="text" id="username-input" placeholder="표시 이름 (선택사항)" maxlength="20">
                 <input type="text" id="room-id-input" placeholder="회의실 ID (또는 새로 생성)" maxlength="50">
                 <button id="join-btn" class="btn btn-primary">회의 참가</button>
                 <button id="create-btn" class="btn btn-secondary">새 회의실 생성</button>
+                <button id="view-timeline-btn" class="btn btn-secondary">회의 기록 보기</button>
             </div>
             <div id="lobby-error" class="error-message"></div>
+            
+            <!-- 회의 기록 목록 모달 -->
+            <div id="meetings-modal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>회의 기록</h3>
+                        <button id="close-meetings-modal" class="close-btn">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="meetings-list" class="meetings-list">
+                            <!-- 회의 목록이 여기에 표시됩니다 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -45,24 +111,103 @@
             <button id="screen-share-btn" class="control-btn" title="화면 공유">
                 <span class="icon">🖥️</span>
             </button>
+            <button id="screen-record-btn" class="control-btn" title="화면 녹화">
+                <span class="icon">📹</span>
+            </button>
+            <button id="virtual-background-btn" class="control-btn" title="가상 배경">
+                <span class="icon">🖼️</span>
+            </button>
+            <button id="record-btn" class="control-btn" title="회의 녹화">
+                <span class="icon">🔴</span>
+            </button>
             <button id="chat-btn" class="control-btn" title="채팅">
                 <span class="icon">💬</span>
+            </button>
+            <button id="whiteboard-btn" class="control-btn" title="화이트보드">
+                <span class="icon">✏️</span>
+            </button>
+            <button id="timeline-btn" class="control-btn" title="타임라인">
+                <span class="icon">📅</span>
             </button>
             <button id="leave-btn" class="control-btn leave" title="나가기">
                 <span class="icon">📞</span>
             </button>
         </div>
+        
+        <!-- 녹화 상태 표시 -->
+        <div id="recording-indicator" class="recording-indicator hidden">
+            <span class="recording-dot"></span>
+            <span>녹화 중...</span>
+        </div>
+
+        <!-- 가상 배경 설정 패널 -->
+        <div id="virtual-background-panel" class="virtual-background-panel hidden">
+            <div class="panel-header">
+                <h3>가상 배경</h3>
+                <button id="close-vb-panel" class="close-btn">✕</button>
+            </div>
+            <div class="panel-content">
+                <div class="vb-option">
+                    <label>
+                        <input type="radio" name="background" value="none" checked>
+                        <span>없음</span>
+                    </label>
+                </div>
+                <div class="vb-option">
+                    <label>
+                        <input type="radio" name="background" value="blur">
+                        <span>블러</span>
+                    </label>
+                </div>
+                <div class="vb-option">
+                    <label>
+                        <input type="radio" name="background" value="image1">
+                        <span>배경 1</span>
+                    </label>
+                </div>
+                <div class="vb-option">
+                    <label>
+                        <input type="radio" name="background" value="image2">
+                        <span>배경 2</span>
+                    </label>
+                </div>
+                <div class="vb-option">
+                    <label>
+                        <input type="radio" name="background" value="image3">
+                        <span>배경 3</span>
+                    </label>
+                </div>
+                <div class="vb-option">
+                    <label>
+                        <input type="file" id="custom-background" accept="image/*" style="display: none;">
+                        <button id="upload-background" class="btn btn-secondary">커스텀 배경 업로드</button>
+                    </label>
+                </div>
+            </div>
+        </div>
 
         <!-- 채팅 사이드바 -->
         <div id="chat-sidebar" class="chat-sidebar hidden">
             <div class="chat-header">
-                <h3>채팅</h3>
+                <div class="chat-tabs">
+                    <button class="tab-btn active" data-tab="chat">채팅</button>
+                    <button class="tab-btn" data-tab="files">파일</button>
+                </div>
                 <button id="close-chat-btn" class="close-btn">✕</button>
             </div>
-            <div id="chat-messages" class="chat-messages"></div>
-            <div class="chat-input-container">
-                <input type="text" id="chat-input" placeholder="메시지를 입력하세요..." maxlength="500">
-                <button id="send-btn" class="send-btn">전송</button>
+            <div id="chat-tab" class="tab-content">
+                <div id="chat-messages" class="chat-messages"></div>
+                <div class="chat-input-container">
+                    <input type="text" id="chat-input" placeholder="메시지를 입력하세요..." maxlength="500">
+                    <button id="send-btn" class="send-btn">전송</button>
+                </div>
+            </div>
+            <div id="files-tab" class="tab-content hidden">
+                <div class="file-upload-area">
+                    <input type="file" id="file-input" multiple style="display: none;">
+                    <button id="upload-file-btn" class="btn btn-primary">파일 업로드</button>
+                </div>
+                <div id="files-list" class="files-list"></div>
             </div>
         </div>
 
@@ -70,6 +215,48 @@
         <div id="user-info" class="user-info">
             <span id="current-username"></span>
             <span id="room-id-display"></span>
+        </div>
+
+        <!-- 타임라인 패널 -->
+        <div id="timeline-panel" class="timeline-panel hidden">
+            <div class="timeline-header">
+                <h3>회의 타임라인</h3>
+                <button id="close-timeline-btn" class="close-btn">✕</button>
+            </div>
+            <div class="timeline-content">
+                <div id="timeline-list" class="timeline-list">
+                    <!-- 타임라인 이벤트들이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 화이트보드 패널 -->
+        <div id="whiteboard-panel" class="whiteboard-panel hidden">
+            <div class="whiteboard-header">
+                <h3>화이트보드</h3>
+                <div class="whiteboard-controls">
+                    <button id="clear-whiteboard-btn" class="btn btn-small">지우기</button>
+                    <button id="close-whiteboard-btn" class="close-btn">✕</button>
+                </div>
+            </div>
+            <div class="whiteboard-toolbar">
+                <div class="tool-group">
+                    <button class="tool-btn active" data-tool="pen" title="펜">✏️</button>
+                    <button class="tool-btn" data-tool="eraser" title="지우개">🧹</button>
+                    <button class="tool-btn" data-tool="rectangle" title="사각형">▭</button>
+                    <button class="tool-btn" data-tool="circle" title="원">○</button>
+                    <button class="tool-btn" data-tool="line" title="직선">─</button>
+                    <button class="tool-btn" data-tool="text" title="텍스트">A</button>
+                </div>
+                <div class="tool-group">
+                    <input type="color" id="color-picker" value="#000000" title="색상">
+                    <input type="range" id="brush-size" min="1" max="50" value="5" title="선 두께">
+                    <span id="brush-size-display">5px</span>
+                </div>
+            </div>
+            <div class="whiteboard-container">
+                <canvas id="whiteboard-canvas"></canvas>
+            </div>
         </div>
     </div>
 

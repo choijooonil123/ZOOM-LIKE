@@ -1,0 +1,14 @@
+{
+  "name": "ZOOM 클론 - 화상 회의",
+  "short_name": "ZOOM 클론",
+  "description": "실시간 화상 회의 플랫폼",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#667eea",
+  "theme_color": "#667eea",
+  "orientation": "any",
+  "icons": [],
+  "categories": ["business", "productivity", "social"],
+  "screenshots": [],
+  "shortcuts": []
+}
