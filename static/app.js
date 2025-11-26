@@ -3,6 +3,11 @@
  * WebRTC 및 Socket.io를 사용한 실시간 화상 회의
  */
 
+// 백엔드 서버 URL 설정
+// 로컬 개발: 빈 문자열 (같은 서버 사용)
+// 프로덕션: Render 백엔드 URL
+const BACKEND_URL = 'https://zoom-like.onrender.com';
+
 class ZoomClone {
     constructor() {
         this.socket = null;
@@ -279,7 +284,8 @@ class ZoomClone {
         }
         
         try {
-            const response = await fetch('/api/login', {
+            const apiUrl = BACKEND_URL ? `${BACKEND_URL}/api/login` : '/api/login';
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -325,7 +331,8 @@ class ZoomClone {
         }
         
         try {
-            const response = await fetch('/api/register', {
+            const apiUrl = BACKEND_URL ? `${BACKEND_URL}/api/register` : '/api/register';
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -388,7 +395,9 @@ class ZoomClone {
     }
 
     async initializeSocket() {
-        this.socket = io();
+        // 백엔드 URL이 설정되어 있으면 사용, 없으면 같은 서버
+        const socketUrl = BACKEND_URL || window.location.origin;
+        this.socket = io(socketUrl);
         
         this.socket.on('connect', () => {
             console.log('서버에 연결되었습니다:', this.socket.id);
@@ -1598,7 +1607,8 @@ class ZoomClone {
         }
         
         try {
-            const response = await fetch(`/api/meetings/room/${this.currentRoomId}/timeline`, {
+            const apiUrl = BACKEND_URL ? `${BACKEND_URL}/api/meetings/room/${this.currentRoomId}/timeline` : `/api/meetings/room/${this.currentRoomId}/timeline`;
+            const response = await fetch(apiUrl, {
                 headers: {
                     'Authorization': `Bearer ${this.authToken}`
                 }
@@ -1713,7 +1723,8 @@ class ZoomClone {
         }
         
         try {
-            const response = await fetch('/api/meetings', {
+            const apiUrl = BACKEND_URL ? `${BACKEND_URL}/api/meetings` : '/api/meetings';
+            const response = await fetch(apiUrl, {
                 headers: {
                     'Authorization': `Bearer ${this.authToken}`
                 }
@@ -1769,7 +1780,8 @@ class ZoomClone {
         }
         
         try {
-            const response = await fetch(`/api/meetings/${meetingId}/timeline`, {
+            const apiUrl = BACKEND_URL ? `${BACKEND_URL}/api/meetings/${meetingId}/timeline` : `/api/meetings/${meetingId}/timeline`;
+            const response = await fetch(apiUrl, {
                 headers: {
                     'Authorization': `Bearer ${this.authToken}`
                 }
