@@ -55,6 +55,7 @@ class ZoomClone {
         
         this.initializeElements();
         this.initializeEventListeners();
+        this.loadRoomIdFromURL();
         this.checkAuthStatus();
     }
 
@@ -486,7 +487,46 @@ class ZoomClone {
     createRoom() {
         const roomId = this.generateRoomId();
         this.roomIdInput.value = roomId;
+        this.saveRoomIdToURL(roomId);
         this.joinRoom();
+    }
+    
+    loadRoomIdFromURL() {
+        // URL 파라미터에서 방 ID 읽기
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room');
+        
+        if (roomId && this.roomIdInput) {
+            this.roomIdInput.value = roomId;
+            // 로컬 스토리지에도 저장
+            localStorage.setItem('lastRoomId', roomId);
+        } else {
+            // URL에 없으면 로컬 스토리지에서 복원
+            const lastRoomId = localStorage.getItem('lastRoomId');
+            if (lastRoomId && this.roomIdInput) {
+                this.roomIdInput.value = lastRoomId;
+            }
+        }
+    }
+    
+    saveRoomIdToURL(roomId) {
+        // URL에 방 ID 추가 (히스토리 변경 없이)
+        const url = new URL(window.location);
+        url.searchParams.set('room', roomId);
+        window.history.replaceState({}, '', url);
+        
+        // 로컬 스토리지에도 저장
+        localStorage.setItem('lastRoomId', roomId);
+    }
+    
+    clearRoomIdFromURL() {
+        // URL에서 방 ID 제거
+        const url = new URL(window.location);
+        url.searchParams.delete('room');
+        window.history.replaceState({}, '', url);
+        
+        // 로컬 스토리지에서도 제거
+        localStorage.removeItem('lastRoomId');
     }
 
     async joinRoom() {
@@ -505,6 +545,9 @@ class ZoomClone {
 
         this.currentUsername = username;
         this.currentRoomId = roomId;
+        
+        // 방 ID를 URL과 로컬 스토리지에 저장
+        this.saveRoomIdToURL(roomId);
 
         // Socket 초기화
         if (!this.socket) {
@@ -1148,7 +1191,9 @@ class ZoomClone {
         this.chatSidebar.classList.add('hidden');
         this.chatMessages.innerHTML = '';
         
-        this.currentRoomId = null;
+        // 방 ID는 유지 (다시 참가할 수 있도록)
+        // URL과 로컬 스토리지에 저장된 방 ID는 그대로 유지
+        // this.currentRoomId = null; // 주석 처리 - 방 ID 유지
         this.currentUsername = null;
     }
 
