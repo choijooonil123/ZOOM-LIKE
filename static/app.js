@@ -708,20 +708,79 @@ class ZoomClone {
 
         // 로컬 스트림 추가
         if (this.localStream) {
-            this.localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, this.localStream);
-                console.log(`트랙 추가: ${track.kind} (${track.enabled ? 'enabled' : 'disabled'})`);
+            const tracks = this.localStream.getTracks();
+            console.log(`로컬 스트림 트랙 수: ${tracks.length} (${targetSid}와 연결)`);
+            tracks.forEach(track => {
+                try {
+                    peerConnection.addTrack(track, this.localStream);
+                    console.log(`✅ 트랙 추가 완료: ${track.kind} (${track.enabled ? 'enabled' : 'disabled'})`, {
+                        id: track.id,
+                        readyState: track.readyState,
+                        muted: track.muted
+                    });
+                } catch (error) {
+                    console.error(`트랙 추가 실패: ${track.kind}`, error);
+                }
+            });
+            
+            // 스트림의 모든 트랙이 추가되었는지 확인
+            const senders = peerConnection.getSenders();
+            console.log(`RTCPeerConnection senders 수: ${senders.length}`);
+            senders.forEach((sender, index) => {
+                if (sender.track) {
+                    console.log(`Sender ${index}:`, {
+                        kind: sender.track.kind,
+                        enabled: sender.track.enabled,
+                        id: sender.track.id
+                    });
+                }
             });
         } else {
-            console.warn('로컬 스트림이 없습니다. 미디어 스트림을 먼저 가져와야 합니다.');
+            console.warn('⚠️ 로컬 스트림이 없습니다. 미디어 스트림을 먼저 가져와야 합니다.');
+            console.warn('이 경우 상대방에게 비디오를 보낼 수 없지만, 상대방의 비디오는 받을 수 있습니다.');
         }
 
         // 원격 스트림 처리
         peerConnection.ontrack = (event) => {
-            console.log('✅ 원격 스트림 수신:', targetSid, event.streams);
+            console.log('✅ 원격 스트림 수신:', targetSid, event);
+            console.log('스트림 정보:', {
+                streams: event.streams,
+                track: event.track,
+                trackKind: event.track?.kind,
+                trackEnabled: event.track?.enabled,
+                trackState: event.track?.readyState
+            });
+            
             if (event.streams && event.streams.length > 0) {
                 const remoteStream = event.streams[0];
+                console.log('원격 스트림 상세:', {
+                    id: remoteStream.id,
+                    active: remoteStream.active,
+                    tracks: remoteStream.getTracks().map(t => ({
+                        kind: t.kind,
+                        enabled: t.enabled,
+                        readyState: t.readyState,
+                        muted: t.muted
+                    }))
+                });
+                
                 // 사용자 정보 가져오기 (서버에서 받은 정보 사용)
+                const existingVideo = document.getElementById(`video-${targetSid}`);
+                let username = 'User';
+                if (existingVideo) {
+                    const label = existingVideo.querySelector('.video-label, .placeholder-name');
+                    if (label) {
+                        username = label.textContent || 'User';
+                    }
+                }
+                
+                console.log(`비디오 요소 추가 시도: ${targetSid}, 사용자: ${username}`);
+                this.addVideoElement(targetSid, remoteStream, username, false);
+                this.updateConnectionStatus(targetSid, 'connected');
+            } else if (event.track) {
+                // streams가 없어도 track이 있으면 스트림 생성
+                console.log('스트림이 없지만 track이 있음, 스트림 생성 시도');
+                const remoteStream = new MediaStream([event.track]);
                 const existingVideo = document.getElementById(`video-${targetSid}`);
                 let username = 'User';
                 if (existingVideo) {
@@ -733,7 +792,7 @@ class ZoomClone {
                 this.addVideoElement(targetSid, remoteStream, username, false);
                 this.updateConnectionStatus(targetSid, 'connected');
             } else {
-                console.warn('스트림이 없습니다:', targetSid);
+                console.warn('스트림과 track이 모두 없습니다:', targetSid, event);
             }
         };
 
@@ -758,6 +817,44 @@ class ZoomClone {
             
             if (state === 'connected') {
                 console.log(`✅ 연결 성공: ${targetSid}`);
+                // 연결 성공 후 스트림 확인
+                const receivers = peerConnection.getReceivers();
+                console.log(`RTCPeerConnection receivers 수: ${receivers.length}`);
+                receivers.forEach((receiver, index) => {
+                    if (receiver.track) {
+                        console.log(`Receiver ${index}:`, {
+                            kind: receiver.track.kind,
+                            enabled: receiver.track.enabled,
+                            readyState: receiver.track.readyState,
+                            id: receiver.track.id,
+                            muted: receiver.track.muted
+                        });
+                    } else {
+                        console.warn(`Receiver ${index}: track이 없음`);
+                    }
+                });
+                
+                // 연결 성공 후 비디오 요소 확인 및 재생 시도
+                setTimeout(() => {
+                    const videoElement = document.getElementById(`video-${targetSid}`);
+                    if (videoElement) {
+                        const video = videoElement.querySelector('video');
+                        if (video) {
+                            console.log(`비디오 요소 확인: ${targetSid}`, {
+                                paused: video.paused,
+                                readyState: video.readyState,
+                                networkState: video.networkState,
+                                hasStream: !!video.srcObject
+                            });
+                            
+                            // 재생되지 않으면 재생 시도
+                            if (video.paused && video.readyState >= 2) {
+                                console.log(`비디오가 일시정지 상태, 재생 시도: ${targetSid}`);
+                                video.play().catch(err => console.error('재생 실패:', err));
+                            }
+                        }
+                    }
+                }, 1000);
             } else if (state === 'failed') {
                 console.error(`❌ 연결 실패: ${targetSid}`);
                 // 재연결 시도
@@ -923,21 +1020,96 @@ class ZoomClone {
 
         // 비디오 로드 이벤트
         video.onloadedmetadata = () => {
-            video.play().catch(err => console.error('비디오 재생 실패:', err));
+            console.log(`비디오 메타데이터 로드: ${username} (${sid})`, {
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
+                readyState: video.readyState,
+                paused: video.paused,
+                muted: video.muted,
+                hasSrcObject: !!video.srcObject
+            });
+            
+            // 비디오 재생 시도
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        console.log(`✅ 비디오 재생 성공: ${username} (${sid})`);
+                        if (!isLocal) {
+                            this.updateConnectionStatus(sid, 'connected');
+                        }
+                    })
+                    .catch(err => {
+                        console.error(`비디오 재생 실패: ${username} (${sid})`, err);
+                        // 재생 실패 시 재시도
+                        setTimeout(() => {
+                            video.play()
+                                .then(() => console.log(`재생 재시도 성공: ${username} (${sid})`))
+                                .catch(e => console.error('재생 재시도 실패:', e));
+                        }, 500);
+                    });
+            }
         };
 
         // 비디오 재생 확인
         video.onplay = () => {
+            console.log(`✅ 비디오 재생 시작: ${username} (${sid})`);
             if (!isLocal) {
-                console.log(`✅ 비디오 재생 시작: ${username} (${sid})`);
                 this.updateConnectionStatus(sid, 'connected');
             }
         };
 
+        video.onpause = () => {
+            console.log(`⏸️ 비디오 일시정지: ${username} (${sid})`);
+        };
+
+        video.onended = () => {
+            console.log(`⏹️ 비디오 종료: ${username} (${sid})`);
+        };
+
         video.onerror = (err) => {
-            console.error(`❌ 비디오 오류: ${username} (${sid})`, err);
+            console.error(`❌ 비디오 오류: ${username} (${sid})`, err, {
+                error: video.error,
+                networkState: video.networkState,
+                readyState: video.readyState
+            });
             this.updateConnectionStatus(sid, 'error');
         };
+
+        // 스트림 상태 확인
+        if (stream) {
+            stream.onaddtrack = (event) => {
+                console.log(`트랙 추가됨: ${username} (${sid})`, event.track);
+            };
+            stream.onremovetrack = (event) => {
+                console.log(`트랙 제거됨: ${username} (${sid})`, event.track);
+            };
+            
+            // 스트림의 모든 트랙 확인
+            const tracks = stream.getTracks();
+            console.log(`스트림 트랙 수: ${username} (${sid})`, tracks.length);
+            tracks.forEach((track, index) => {
+                console.log(`트랙 ${index}:`, {
+                    kind: track.kind,
+                    enabled: track.enabled,
+                    readyState: track.readyState,
+                    muted: track.muted,
+                    id: track.id
+                });
+                
+                track.onended = () => {
+                    console.log(`트랙 종료: ${username} (${sid})`, track.kind);
+                };
+                
+                track.onmute = () => {
+                    console.log(`트랙 음소거: ${username} (${sid})`, track.kind);
+                };
+                
+                track.onunmute = () => {
+                    console.log(`트랙 음소거 해제: ${username} (${sid})`, track.kind);
+                };
+            });
+        }
     }
 
     updateConnectionStatus(sid, state) {
