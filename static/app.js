@@ -1811,7 +1811,7 @@ class ZoomClone {
 document.addEventListener('DOMContentLoaded', () => {
     // Service Worker 등록 (PWA 지원)
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/static/sw.js')
+        navigator.serviceWorker.register('/sw.js')
             .then((registration) => {
                 console.log('Service Worker 등록 성공:', registration.scope);
             })

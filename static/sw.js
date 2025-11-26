@@ -3,10 +3,10 @@
 const CACHE_NAME = 'zoom-clone-v2';
 const urlsToCache = [
   '/',
-  '/static/index.html',
-  '/static/app.js',
-  '/static/style.css',
-  '/static/manifest.json'
+  '/index.html',
+  '/app.js',
+  '/style.css',
+  '/manifest.json'
   // 외부 CDN 리소스는 캐시하지 않음 (CORS 문제 방지)
 ];
 
