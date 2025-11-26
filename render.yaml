@@ -3,10 +3,17 @@ services:
     name: zoom-clone
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn server:socket_app --host 0.0.0.0 --port $PORT
+    startCommand: python server.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: PORT
+        fromService:
+          type: web
+          name: zoom-clone
+          property: port
+      - key: SECRET_KEY
+        generateValue: true
     healthCheckPath: /health
 
 
