@@ -485,14 +485,9 @@ class ZoomClone {
     }
 
     createRoom() {
-        // 기존 방 ID가 있으면 그대로 사용, 없으면 새로 생성
-        let roomId = this.roomIdInput.value.trim();
-        
-        if (!roomId) {
-            // 방 ID가 없을 때만 새로 생성
-            roomId = this.generateRoomId();
-            this.roomIdInput.value = roomId;
-        }
+        // 새 회의실 생성: 항상 새로운 방 ID 생성 (기존 방 ID 무시)
+        const roomId = this.generateRoomId();
+        this.roomIdInput.value = roomId;
         
         // 방 ID를 URL과 로컬 스토리지에 저장
         this.saveRoomIdToURL(roomId);
@@ -546,7 +541,8 @@ class ZoomClone {
             return;
         }
 
-        // 방 ID가 없으면 기존 방 ID 사용 (URL 또는 로컬 스토리지에서)
+        // 회의 참가: 방 ID가 없으면 기존 방 ID 사용 (URL 또는 로컬 스토리지에서)
+        // 방 ID가 입력되어 있으면 그대로 사용 (변경하지 않음)
         if (!roomId) {
             const urlParams = new URLSearchParams(window.location.search);
             roomId = urlParams.get('room') || localStorage.getItem('lastRoomId');
@@ -554,10 +550,12 @@ class ZoomClone {
             if (roomId) {
                 this.roomIdInput.value = roomId;
             } else {
-                this.showError('회의실 ID를 입력하세요');
+                this.showError('회의실 ID를 입력하거나 "새 회의실 생성" 버튼을 클릭하세요');
                 return;
             }
         }
+        
+        // 입력된 방 ID는 절대 변경하지 않음
 
         // 방 ID가 변경되지 않도록 보장
         this.currentUsername = username;
