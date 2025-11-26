@@ -892,6 +892,19 @@ class ZoomClone {
     }
 }
 
+// Service Worker 등록
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/static/sw.js')
+            .then((registration) => {
+                console.log('Service Worker 등록 성공:', registration.scope);
+            })
+            .catch((error) => {
+                console.warn('Service Worker 등록 실패:', error);
+            });
+    });
+}
+
 // 애플리케이션 시작
 document.addEventListener('DOMContentLoaded', () => {
     window.zoomClone = new ZoomClone();
