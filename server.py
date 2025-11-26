@@ -32,16 +32,29 @@ from auth import (
 app = FastAPI(title="ZOOM Clone")
 
 # CORS 설정
+# 프론트엔드 URL 허용 (환경 변수 또는 기본값)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://screen-share-b540b.web.app")
+ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    "http://localhost:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:8000",
+    "https://screen-share-b540b.web.app",
+    # 개발 환경을 위한 모든 도메인 허용 (프로덕션에서는 제거 권장)
+    "*"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS if "*" not in ALLOWED_ORIGINS else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Socket.io 서버 생성
-sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode='asgi')
+# 프론트엔드 URL 허용 (위에서 이미 정의된 FRONTEND_URL 사용)
+sio = socketio.AsyncServer(cors_allowed_origins=["*"], async_mode='asgi')
 # FastAPI 앱에 Socket.io 마운트
 app.mount("/socket.io", socketio.ASGIApp(sio))
 # Socket.io가 포함된 앱 (하위 호환성을 위해 유지)
@@ -80,6 +93,19 @@ async def read_root():
     """메인 페이지"""
     return FileResponse("static/index.html")
 
+@app.options("/api/{path:path}")
+async def options_handler(path: str):
+    """CORS preflight 요청 처리"""
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
+
 @app.get("/static/manifest.json")
 async def get_manifest():
     """PWA 매니페스트"""
@@ -113,29 +139,29 @@ class TokenResponse(BaseModel):
 @app.post("/api/register", response_model=TokenResponse)
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """회원가입"""
-    # 사용자명 중복 확인
-    if get_user_by_username(db, user_data.username):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미 사용 중인 사용자명입니다"
-        )
-    
-    # 이메일 중복 확인
-    if get_user_by_email(db, user_data.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이미 사용 중인 이메일입니다"
-        )
-    
-    # 비밀번호 길이 검증
-    if len(user_data.password) < 6:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="비밀번호는 최소 6자 이상이어야 합니다"
-        )
-    
-    # 사용자 생성
     try:
+        # 사용자명 중복 확인
+        if get_user_by_username(db, user_data.username):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="이미 사용 중인 사용자명입니다"
+            )
+        
+        # 이메일 중복 확인
+        if get_user_by_email(db, user_data.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="이미 사용 중인 이메일입니다"
+            )
+        
+        # 비밀번호 길이 검증
+        if len(user_data.password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="비밀번호는 최소 6자 이상이어야 합니다"
+            )
+        
+        # 사용자 생성
         db_user = create_user(
             db=db,
             username=user_data.username,
@@ -154,7 +180,13 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
                 "email": db_user.email
             }
         )
+    except HTTPException:
+        # HTTPException은 그대로 재발생
+        raise
     except Exception as e:
+        print(f"회원가입 오류: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"회원가입 중 오류가 발생했습니다: {str(e)}"
@@ -528,27 +560,19 @@ async def join_room(sid, data):
             db.commit()
         
         # 기존 사용자들에게 새 사용자 알림
-        existing_count = len([uid for uid in rooms[room_id]["users"] if uid != sid and uid in users])
-        if existing_count > 0:
-            await sio.emit("user-joined", {
-                "sid": sid,
-                "username": username
-            }, room=room_id, skip_sid=sid)
-            print(f"기존 사용자들에게 새 사용자 알림: {username} ({sid})")
+        await sio.emit("user-joined", {
+            "sid": sid,
+            "username": username
+        }, room=room_id, skip_sid=sid)
         
         # 새 사용자에게 기존 사용자 목록 전송
         existing_users = [
             {"sid": uid, "username": users[uid].get("username")}
             for uid in rooms[room_id]["users"] if uid != sid and uid in users
         ]
-        if existing_users:
-            await sio.emit("existing-users", {"users": existing_users}, room=sid)
-            print(f"새 사용자에게 기존 사용자 목록 전송: {len(existing_users)}명")
-        else:
-            await sio.emit("existing-users", {"users": []}, room=sid)
-            print(f"기존 사용자가 없습니다 (첫 번째 참가자)")
+        await sio.emit("existing-users", {"users": existing_users}, room=sid)
         
-        print(f"✅ 사용자 {username} ({sid})가 방 {room_id}에 참가했습니다 (총 {len(rooms[room_id]['users'])}명)")
+        print(f"사용자 {username} ({sid})가 방 {room_id}에 참가했습니다")
     except Exception as e:
         print(f"회의 참가 중 오류: {e}")
         db.rollback()
@@ -566,9 +590,7 @@ async def offer(sid, data):
             "offer": offer,
             "from": sid
         }, room=target_sid)
-        print(f"📤 Offer 전송: {sid[:8]}... -> {target_sid[:8]}...")
-    else:
-        print(f"⚠️ Offer 전송 실패: target_sid={target_sid}, offer={bool(offer)}")
+        print(f"Offer 전송: {sid} -> {target_sid}")
 
 @sio.event
 async def answer(sid, data):
@@ -581,9 +603,7 @@ async def answer(sid, data):
             "answer": answer,
             "from": sid
         }, room=target_sid)
-        print(f"📤 Answer 전송: {sid[:8]}... -> {target_sid[:8]}...")
-    else:
-        print(f"⚠️ Answer 전송 실패: target_sid={target_sid}, answer={bool(answer)}")
+        print(f"Answer 전송: {sid} -> {target_sid}")
 
 @sio.event
 async def ice_candidate(sid, data):
@@ -596,7 +616,6 @@ async def ice_candidate(sid, data):
             "candidate": candidate,
             "from": sid
         }, room=target_sid)
-        # ICE Candidate는 너무 많으므로 로그는 간소화
 
 @sio.event
 async def message(sid, data):
