@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZOOM 클론 - 화상 회의</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/style.css">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // 백엔드 서버 URL 설정
@@ -66,9 +66,9 @@
             </div>
             <div class="lobby-form">
                 <input type="text" id="username-input" placeholder="이름을 입력하세요" maxlength="20">
-                <input type="text" id="room-id-input" placeholder="회의실 ID (또는 새로 생성)" maxlength="50">
-                <button id="join-btn" class="btn btn-primary">회의 참가</button>
-                <button id="create-btn" class="btn btn-secondary">새 회의실 생성</button>
+                <input type="text" id="target-username-input" placeholder="연결할 사용자명 (선택사항, 비우면 자동 매칭)" maxlength="20">
+                <button id="connect-btn" class="btn btn-primary">연결 시작</button>
+                <p class="info-text">💡 사용자명을 입력하지 않으면 자동으로 다른 사용자와 매칭됩니다</p>
             </div>
             <div id="lobby-error" class="error-message"></div>
         </div>
@@ -85,18 +85,59 @@
 
         <!-- 컨트롤 바 -->
         <div class="controls-bar">
-            <button id="mic-btn" class="control-btn" title="마이크">
-                <span class="icon">🎤</span>
-            </button>
-            <button id="video-btn" class="control-btn" title="비디오">
-                <span class="icon">📹</span>
-            </button>
+            <!-- 마이크 컨트롤 -->
+            <div class="control-group">
+                <button id="mic-btn" class="control-btn" title="마이크">
+                    <span class="icon">🎤</span>
+                </button>
+                <div class="device-dropdown">
+                    <button class="device-toggle">∨</button>
+                    <div class="device-menu hidden">
+                        <div class="device-section">
+                            <label>마이크</label>
+                            <select id="mic-select"></select>
+                        </div>
+                        <div class="device-section">
+                            <label>스피커</label>
+                            <select id="speaker-select"></select>
+                            <button id="test-speaker-btn" class="test-btn">테스트</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 비디오 컨트롤 -->
+            <div class="control-group">
+                <button id="video-btn" class="control-btn" title="비디오">
+                    <span class="icon">📹</span>
+                </button>
+                <div class="device-dropdown">
+                    <button class="device-toggle">∨</button>
+                    <div class="device-menu hidden">
+                        <div class="device-section">
+                            <label>카메라</label>
+                            <select id="camera-select"></select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <button id="screen-share-btn" class="control-btn" title="화면 공유">
                 <span class="icon">🖥️</span>
             </button>
+            
+            <button id="view-toggle-btn" class="control-btn" title="화면 보기 전환">
+                <span class="icon">👁️</span>
+            </button>
+            
             <button id="chat-btn" class="control-btn" title="채팅">
                 <span class="icon">💬</span>
             </button>
+            
+            <button id="record-btn" class="control-btn" title="녹화">
+                <span class="icon">🔴</span>
+            </button>
+            
             <button id="leave-btn" class="control-btn leave" title="나가기">
                 <span class="icon">📞</span>
             </button>
@@ -115,14 +156,36 @@
             </div>
         </div>
 
+        <!-- 참가자 목록 사이드바 -->
+        <div id="participants-sidebar" class="participants-sidebar hidden">
+            <div class="participants-header">
+                <h3>참가자 (<span id="participants-count">0</span>)</h3>
+                <button id="close-participants-btn" class="close-btn">✕</button>
+            </div>
+            <div id="participants-list" class="participants-list">
+                <!-- 참가자 목록이 여기에 동적으로 추가됩니다 -->
+            </div>
+            <div id="participant-actions" class="participant-actions hidden">
+                <button id="mute-all-btn" class="action-btn">전체 음소거</button>
+                <button id="unmute-all-btn" class="action-btn">전체 음소거 해제</button>
+            </div>
+        </div>
+        
+        <!-- 녹화 상태 표시 -->
+        <div id="recording-indicator" class="recording-indicator hidden">
+            <span class="recording-dot"></span>
+            <span>녹화 중...</span>
+        </div>
+
         <!-- 사용자 정보 표시 -->
         <div id="user-info" class="user-info">
             <span id="current-username"></span>
             <span id="room-id-display"></span>
+            <button id="participants-btn" class="participants-btn" title="참가자">👥</button>
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/app.js"></script>
 </body>
 </html>
 
