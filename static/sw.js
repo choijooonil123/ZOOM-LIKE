@@ -2,11 +2,24 @@
 const CACHE_NAME = 'zoom-clone-v1';
 const urlsToCache = [
     '/',
-    '/static/index.html',
-    '/static/app.js',
-    '/static/style.css',
-    '/static/manifest.json'
+    '/index.html',
+    '/app.js',
+    '/style.css',
+    '/manifest.json'
 ];
+
+// Chrome 확장 프로그램 메시지 처리 (에러 방지)
+self.addEventListener('message', (event) => {
+    // 확장 프로그램 메시지는 무시
+    if (event.data && event.data.type && event.data.type.startsWith('chrome-extension')) {
+        return;
+    }
+    
+    // 일반 메시지는 처리
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+});
 
 // 설치 이벤트
 self.addEventListener('install', (event) => {
@@ -52,9 +65,25 @@ self.addEventListener('activate', (event) => {
 
 // fetch 이벤트 - 네트워크 우선, 실패 시 캐시 사용
 self.addEventListener('fetch', (event) => {
-    // chrome-extension, chrome:// 등 unsupported 스키마는 처리하지 않음
     const url = new URL(event.request.url);
+    
+    // chrome-extension, chrome:// 등 unsupported 스키마는 처리하지 않음
     if (url.protocol === 'chrome-extension:' || url.protocol === 'chrome:') {
+        return;
+    }
+    
+    // Socket.io 요청은 Service Worker를 통과하지 않음 (WebSocket/polling 요청)
+    if (url.pathname.includes('/socket.io/') || url.hostname.includes('zoom-like.onrender.com')) {
+        return;
+    }
+    
+    // API 요청도 Service Worker를 통과하지 않음 (실시간 통신)
+    if (url.pathname.includes('/api/')) {
+        return;
+    }
+    
+    // 외부 도메인 요청은 Service Worker를 통과하지 않음
+    if (url.origin !== self.location.origin) {
         return;
     }
     

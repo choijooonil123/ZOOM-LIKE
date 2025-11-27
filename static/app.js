@@ -571,6 +571,23 @@ class ZoomClone {
     }
 }
 
+// 전역 에러 핸들러 - Chrome 확장 프로그램 에러 무시
+window.addEventListener('error', (event) => {
+    // Chrome 확장 프로그램 관련 에러는 무시
+    if (event.message && event.message.includes('message channel closed')) {
+        event.preventDefault();
+        return false;
+    }
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    // Chrome 확장 프로그램 관련 Promise rejection 무시
+    if (event.reason && event.reason.message && event.reason.message.includes('message channel closed')) {
+        event.preventDefault();
+        return false;
+    }
+});
+
 // 애플리케이션 시작
 document.addEventListener('DOMContentLoaded', () => {
     window.zoomClone = new ZoomClone();
