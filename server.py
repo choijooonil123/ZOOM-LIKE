@@ -46,10 +46,11 @@ ALLOWED_ORIGINS = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS if "*" not in ALLOWED_ORIGINS else ["*"],
+    allow_origins=["*"],  # 모든 origin 허용 (개발용)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Socket.io 서버 생성
@@ -93,14 +94,18 @@ async def read_root():
     """메인 페이지"""
     return FileResponse("static/index.html")
 
-@app.options("/api/{path:path}")
+@app.options("/{path:path}")
 async def options_handler(path: str):
-    """CORS preflight 요청 처리"""
+    """CORS preflight 요청 처리 (모든 경로)"""
     return Response(
         status_code=200,
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        },
+    )
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
             "Access-Control-Allow-Credentials": "true"
         }
