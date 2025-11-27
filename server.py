@@ -540,8 +540,12 @@ async def join_room(sid, data):
         }
         
         # 방에 사용자 추가
-        rooms[room_id]["users"].append(sid)
+        if sid not in rooms[room_id]["users"]:
+            rooms[room_id]["users"].append(sid)
         await sio.enter_room(sid, room_id)
+        
+        print(f"방 {room_id}의 현재 사용자 수: {len(rooms[room_id]['users'])}")
+        print(f"방 {room_id}의 사용자 목록: {rooms[room_id]['users']}")
         
         # 데이터베이스에 참가자 기록
         if meeting:
@@ -572,12 +576,18 @@ async def join_room(sid, data):
         
         # 새 사용자에게 기존 사용자 목록 전송
         existing_users = [
-            {"sid": uid, "username": users[uid].get("username")}
+            {"sid": uid, "username": users[uid].get("username", f"User_{uid[:8]}")}
             for uid in rooms[room_id]["users"] if uid != sid and uid in users
         ]
+        
+        print(f"기존 사용자 목록 전송: {len(existing_users)}명")
+        for user in existing_users:
+            print(f"  - {user['username']} ({user['sid']})")
+        
         await sio.emit("existing-users", {"users": existing_users}, room=sid)
         
-        print(f"사용자 {username} ({sid})가 방 {room_id}에 참가했습니다")
+        print(f"✅ 사용자 {username} ({sid})가 방 {room_id}에 참가했습니다")
+        print(f"   방의 총 사용자 수: {len(rooms[room_id]['users'])}")
     except Exception as e:
         print(f"회의 참가 중 오류: {e}")
         db.rollback()
