@@ -574,19 +574,42 @@ class ZoomClone {
 // 전역 에러 핸들러 - Chrome 확장 프로그램 에러 무시
 window.addEventListener('error', (event) => {
     // Chrome 확장 프로그램 관련 에러는 무시
-    if (event.message && event.message.includes('message channel closed')) {
+    const errorMessage = event.message || event.error?.message || '';
+    if (errorMessage.includes('message channel closed') || 
+        errorMessage.includes('asynchronous response') ||
+        errorMessage.includes('listener indicated')) {
         event.preventDefault();
+        event.stopPropagation();
+        return false;
+    }
+}, true); // capture phase에서도 처리
+
+window.addEventListener('unhandledrejection', (event) => {
+    // Chrome 확장 프로그램 관련 Promise rejection 무시
+    const errorMessage = event.reason?.message || String(event.reason || '');
+    if (errorMessage.includes('message channel closed') || 
+        errorMessage.includes('asynchronous response') ||
+        errorMessage.includes('listener indicated')) {
+        event.preventDefault();
+        event.stopPropagation();
         return false;
     }
 });
 
-window.addEventListener('unhandledrejection', (event) => {
-    // Chrome 확장 프로그램 관련 Promise rejection 무시
-    if (event.reason && event.reason.message && event.reason.message.includes('message channel closed')) {
-        event.preventDefault();
-        return false;
-    }
-});
+// Service Worker 등록 시 에러 핸들링
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        // Service Worker 메시지 처리 (에러 방지)
+        try {
+            // 메시지 처리
+        } catch (error) {
+            // 확장 프로그램 관련 에러 무시
+            if (!error.message || !error.message.includes('message channel')) {
+                console.warn('Service Worker message 에러:', error);
+            }
+        }
+    });
+}
 
 // 애플리케이션 시작
 document.addEventListener('DOMContentLoaded', () => {

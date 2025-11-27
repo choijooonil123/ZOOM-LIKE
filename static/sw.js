@@ -10,14 +10,32 @@ const urlsToCache = [
 
 // Chrome 확장 프로그램 메시지 처리 (에러 방지)
 self.addEventListener('message', (event) => {
-    // 확장 프로그램 메시지는 무시
-    if (event.data && event.data.type && event.data.type.startsWith('chrome-extension')) {
-        return;
-    }
-    
-    // 일반 메시지는 처리
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-        self.skipWaiting();
+    // 모든 메시지에 대해 명시적으로 처리하여 async 응답 에러 방지
+    try {
+        // 확장 프로그램 메시지는 즉시 응답 없이 무시
+        if (event.data && (
+            (event.data.type && event.data.type.startsWith('chrome-extension')) ||
+            (event.source && event.source.type === 'chrome-extension')
+        )) {
+            // 확장 프로그램 메시지는 응답하지 않음
+            return;
+        }
+        
+        // 일반 메시지는 처리
+        if (event.data && event.data.type === 'SKIP_WAITING') {
+            self.skipWaiting().then(() => {
+                // 응답이 필요한 경우에만 응답
+                if (event.ports && event.ports.length > 0) {
+                    event.ports[0].postMessage({ success: true });
+                }
+            });
+        } else if (event.ports && event.ports.length > 0) {
+            // 포트가 있으면 즉시 응답 (async 응답 에러 방지)
+            event.ports[0].postMessage({ success: true });
+        }
+    } catch (error) {
+        // 에러 발생 시 무시 (확장 프로그램 관련 에러)
+        console.warn('Service Worker message 처리 중 에러 (무시됨):', error);
     }
 });
 
