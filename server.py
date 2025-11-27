@@ -32,30 +32,16 @@ from auth import (
 app = FastAPI(title="ZOOM Clone")
 
 # CORS 설정
-# 프론트엔드 URL 허용 (환경 변수 또는 기본값)
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://screen-share-b540b.web.app")
-ALLOWED_ORIGINS = [
-    FRONTEND_URL,
-    "http://localhost:8000",
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-    "https://screen-share-b540b.web.app",
-    # 개발 환경을 위한 모든 도메인 허용 (프로덕션에서는 제거 권장)
-    "*"
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 모든 origin 허용 (개발용)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 # Socket.io 서버 생성
-# 프론트엔드 URL 허용 (위에서 이미 정의된 FRONTEND_URL 사용)
-sio = socketio.AsyncServer(cors_allowed_origins=["*"], async_mode='asgi')
+sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode='asgi')
 # FastAPI 앱에 Socket.io 마운트
 app.mount("/socket.io", socketio.ASGIApp(sio))
 # Socket.io가 포함된 앱 (하위 호환성을 위해 유지)
@@ -94,23 +80,6 @@ async def read_root():
     """메인 페이지"""
     return FileResponse("static/index.html")
 
-@app.options("/{path:path}")
-async def options_handler(path: str):
-    """CORS preflight 요청 처리 (모든 경로)"""
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-        },
-    )
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Access-Control-Allow-Credentials": "true"
-        }
-    )
-
 @app.get("/static/manifest.json")
 async def get_manifest():
     """PWA 매니페스트"""
@@ -144,29 +113,29 @@ class TokenResponse(BaseModel):
 @app.post("/api/register", response_model=TokenResponse)
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """회원가입"""
+    # 사용자명 중복 확인
+    if get_user_by_username(db, user_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 사용 중인 사용자명입니다"
+        )
+    
+    # 이메일 중복 확인
+    if get_user_by_email(db, user_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 사용 중인 이메일입니다"
+        )
+    
+    # 비밀번호 길이 검증
+    if len(user_data.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="비밀번호는 최소 6자 이상이어야 합니다"
+        )
+    
+    # 사용자 생성
     try:
-        # 사용자명 중복 확인
-        if get_user_by_username(db, user_data.username):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="이미 사용 중인 사용자명입니다"
-            )
-        
-        # 이메일 중복 확인
-        if get_user_by_email(db, user_data.email):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="이미 사용 중인 이메일입니다"
-            )
-        
-        # 비밀번호 길이 검증
-        if len(user_data.password) < 6:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="비밀번호는 최소 6자 이상이어야 합니다"
-            )
-        
-        # 사용자 생성
         db_user = create_user(
             db=db,
             username=user_data.username,
@@ -185,13 +154,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
                 "email": db_user.email
             }
         )
-    except HTTPException:
-        # HTTPException은 그대로 재발생
-        raise
     except Exception as e:
-        print(f"회원가입 오류: {str(e)}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"회원가입 중 오류가 발생했습니다: {str(e)}"
@@ -505,29 +468,57 @@ async def join_room(sid, data):
     
     db = SessionLocal()
     try:
-        # 방이 없으면 생성 (데이터베이스에도 저장)
+        # 먼저 데이터베이스에서 회의 조회 (활성/비활성 모두 확인)
+        meeting = db.query(Meeting).filter(Meeting.room_id == room_id).order_by(Meeting.started_at.desc()).first()
+        
+        # 메모리에 방이 없는 경우
         if room_id not in rooms:
+            # DB에 회의가 없으면 새로 생성
+            if not meeting:
+                meeting = Meeting(
+                    room_id=room_id,
+                    created_by=user_id,
+                    started_at=datetime.utcnow(),
+                    is_active=True
+                )
+                db.add(meeting)
+                db.commit()
+                db.refresh(meeting)
+            # DB에 회의가 있지만 비활성인 경우, 다시 활성화
+            elif not meeting.is_active:
+                meeting.is_active = True
+                meeting.started_at = datetime.utcnow()  # 새 세션 시작 시간
+                meeting.ended_at = None
+                db.commit()
+            
+            # 메모리에 방 생성
             rooms[room_id] = {
                 "id": room_id,
                 "users": [],
-                "created_at": datetime.now().isoformat()
+                "created_at": datetime.now().isoformat(),
+                "db_id": meeting.id
             }
-            
-            # 데이터베이스에 회의 생성
-            meeting = Meeting(
-                room_id=room_id,
-                created_by=user_id,
-                started_at=datetime.utcnow(),
-                is_active=True
-            )
-            db.add(meeting)
-            db.commit()
-            db.refresh(meeting)
-            rooms[room_id]["db_id"] = meeting.id
         else:
-            # 기존 회의 조회
-            meeting = db.query(Meeting).filter(Meeting.room_id == room_id, Meeting.is_active == True).first()
-            if meeting:
+            # 메모리에 방이 있는 경우
+            # DB에 회의가 없으면 생성 (동기화)
+            if not meeting:
+                meeting = Meeting(
+                    room_id=room_id,
+                    created_by=user_id,
+                    started_at=datetime.utcnow(),
+                    is_active=True
+                )
+                db.add(meeting)
+                db.commit()
+                db.refresh(meeting)
+                rooms[room_id]["db_id"] = meeting.id
+            else:
+                # DB 회의가 비활성인 경우 활성화
+                if not meeting.is_active:
+                    meeting.is_active = True
+                    meeting.started_at = datetime.utcnow()
+                    meeting.ended_at = None
+                    db.commit()
                 rooms[room_id]["db_id"] = meeting.id
         
         # 사용자 정보 저장
@@ -544,29 +535,25 @@ async def join_room(sid, data):
             rooms[room_id]["users"].append(sid)
         await sio.enter_room(sid, room_id)
         
-        print(f"방 {room_id}의 현재 사용자 수: {len(rooms[room_id]['users'])}")
-        print(f"방 {room_id}의 사용자 목록: {rooms[room_id]['users']}")
+        # 데이터베이스에 참가자 기록 (meeting은 항상 존재함)
+        participant = MeetingParticipant(
+            meeting_id=meeting.id,
+            user_id=user_id,
+            username=username,
+            joined_at=datetime.utcnow()
+        )
+        db.add(participant)
         
-        # 데이터베이스에 참가자 기록
-        if meeting:
-            participant = MeetingParticipant(
-                meeting_id=meeting.id,
-                user_id=user_id,
-                username=username,
-                joined_at=datetime.utcnow()
-            )
-            db.add(participant)
-            
-            # 참가 이벤트 기록
-            event = MeetingEvent(
-                meeting_id=meeting.id,
-                event_type="user_join",
-                user_id=user_id,
-                username=username,
-                timestamp=datetime.utcnow()
-            )
-            db.add(event)
-            db.commit()
+        # 참가 이벤트 기록
+        event = MeetingEvent(
+            meeting_id=meeting.id,
+            event_type="user_join",
+            user_id=user_id,
+            username=username,
+            timestamp=datetime.utcnow()
+        )
+        db.add(event)
+        db.commit()
         
         # 기존 사용자들에게 새 사용자 알림
         await sio.emit("user-joined", {
@@ -576,20 +563,15 @@ async def join_room(sid, data):
         
         # 새 사용자에게 기존 사용자 목록 전송
         existing_users = [
-            {"sid": uid, "username": users[uid].get("username", f"User_{uid[:8]}")}
+            {"sid": uid, "username": users[uid].get("username")}
             for uid in rooms[room_id]["users"] if uid != sid and uid in users
         ]
-        
-        print(f"기존 사용자 목록 전송: {len(existing_users)}명")
-        for user in existing_users:
-            print(f"  - {user['username']} ({user['sid']})")
-        
         await sio.emit("existing-users", {"users": existing_users}, room=sid)
         
-        print(f"✅ 사용자 {username} ({sid})가 방 {room_id}에 참가했습니다")
-        print(f"   방의 총 사용자 수: {len(rooms[room_id]['users'])}")
+        print(f"사용자 {username} ({sid})가 방 {room_id}에 참가했습니다")
     except Exception as e:
         print(f"회의 참가 중 오류: {e}")
+        await sio.emit("error", {"message": f"회의 참가 실패: {str(e)}"}, room=sid)
         db.rollback()
     finally:
         db.close()
